@@ -1,0 +1,19 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Map /api/leads (used by the existing frontend) to the Netlify function
+[[redirects]]
+  from = "/api/leads"
+  to = "/.netlify/functions/leads"
+  status = 200
+  force = true
+
+# SPA fallback — any unknown route serves index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
