@@ -4,27 +4,24 @@
 //   POST /api/leads (redirected to this function)
 //     - Validates form fields
 //     - Saves the lead JSON to Netlify Blobs (free, built-in storage)
-//     - Emails LEAD_NOTIFICATION_EMAIL via SMTP if SMTP env vars are set
+//     - Emails LEAD_NOTIFICATION_EMAIL via Resend if RESEND_API_KEY is set
 //   GET  /api/leads?token=<ADMIN_TOKEN>
 //     - Returns all leads as JSON for Tyler's review
 //
-// Required environment variables (set in Netlify → Site settings → Environment variables):
-//   SMTP_HOST       e.g. smtp.gmail.com
-//   SMTP_PORT       e.g. 587
-//   SMTP_USER       e.g. applinfc@gmail.com
-//   SMTP_PASS       e.g. a 16-char Gmail App Password
-//   SMTP_FROM       (optional) defaults to SMTP_USER
+// Required environment variables (set in Netlify → Site configuration → Environment variables):
+//   RESEND_API_KEY    your Resend API key (https://resend.com/api-keys)
 //
 // Optional environment variables:
 //   LEAD_NOTIFICATION_EMAIL   override where leads are emailed (default: applinfc@gmail.com)
+//   LEAD_FROM_EMAIL           override the From address (default: onboarding@resend.dev — works without DNS)
 //   ADMIN_TOKEN               override the admin token (default: tyler2026)
 
 import { getStore } from "@netlify/blobs";
-import nodemailer from "nodemailer";
 import { z } from "zod";
 
 const DEFAULT_LEAD_EMAIL = "applinfc@gmail.com";
 const DEFAULT_ADMIN_TOKEN = "tyler2026";
+const DEFAULT_FROM_EMAIL = "MobilityLeads Pro <onboarding@resend.dev>";
 
 const VEHICLE_FOR_OPTIONS = [
   "Myself",
@@ -94,32 +91,40 @@ function formatLeadEmail(lead) {
 }
 
 async function sendLeadEmail(lead) {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+  const apiKey = process.env.RESEND_API_KEY;
   const recipient = process.env.LEAD_NOTIFICATION_EMAIL || DEFAULT_LEAD_EMAIL;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+  const fromEmail = process.env.LEAD_FROM_EMAIL || DEFAULT_FROM_EMAIL;
+  if (!apiKey) {
     console.log(
-      `[leads] SMTP env not set — would have emailed ${recipient} re: lead #${lead.id} (${lead.fullName}, ${lead.zip})`
+      `[leads] RESEND_API_KEY not set — would have emailed ${recipient} re: lead #${lead.id} (${lead.fullName}, ${lead.zip})`
     );
-    return { sent: false, reason: "smtp_not_configured" };
+    return { sent: false, reason: "resend_not_configured" };
   }
   try {
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT ? Number(SMTP_PORT) : 587,
-      secure: SMTP_PORT === "465",
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [recipient],
+        reply_to: lead.email,
+        subject: `New MobilityLeads Pro Lead: ${lead.fullName} (${lead.zip})`,
+        text: formatLeadEmail(lead),
+      }),
     });
-    await transporter.sendMail({
-      from: SMTP_FROM ?? SMTP_USER,
-      to: recipient,
-      subject: `New MobilityLeads Pro Lead: ${lead.fullName} (${lead.zip})`,
-      text: formatLeadEmail(lead),
-    });
-    console.log(`[leads] Sent lead #${lead.id} email to ${recipient}`);
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`[leads] Resend API error ${res.status}:`, body);
+      return { sent: false, reason: "resend_error", status: res.status, body };
+    }
+    console.log(`[leads] Sent lead #${lead.id} email to ${recipient} via Resend`);
     return { sent: true };
   } catch (err) {
     console.error(`[leads] Email failed for lead #${lead.id}:`, err);
-    return { sent: false, reason: "smtp_error", error: String(err) };
+    return { sent: false, reason: "resend_exception", error: String(err) };
   }
 }
 
