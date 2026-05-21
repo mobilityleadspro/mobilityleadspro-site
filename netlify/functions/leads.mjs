@@ -211,7 +211,3 @@ export default async (req, context) => {
 
   return jsonResponse(201, { id: lead.id, fullName: lead.fullName });
 };
-
-export const config = {
-  path: "/api/leads",
-};
