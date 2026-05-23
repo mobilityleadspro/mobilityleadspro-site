@@ -49,6 +49,38 @@ const TIMELINE_OPTIONS = [
   "3–6 months",
   "Just researching",
 ];
+const DELIVERY_PREF_OPTIONS = [
+  "Pick up at dealer",
+  "Delivered to my home",
+  "Not sure yet",
+];
+const PAYMENT_PLAN_OPTIONS = [
+  "Cash / Own funds",
+  "Financing",
+  "VA benefit / Grant",
+  "Not sure yet — need help",
+];
+const TRADE_IN_OPTIONS = ["No", "Yes", "Maybe"];
+
+// Lead-quality scoring: flags that make a lead HOT and ready to call
+function computeHotFlags(lead) {
+  const flags = [];
+  if (lead.timeline === "Within 30 days") flags.push("30-day buyer");
+  if (lead.paymentPlan === "Cash / Own funds") flags.push("Cash buyer");
+  if (lead.paymentPlan === "VA benefit / Grant") flags.push("VA grant");
+  if (lead.paymentPlan === "Not sure yet — need help") flags.push("Needs financing guidance");
+  if (lead.tradeIn === "Yes") flags.push("Trade-in");
+  if (lead.deliveryPref === "Delivered to my home") flags.push("Wants delivery");
+  return flags;
+}
+
+// Treat empty strings as "not provided" for optional enum fields
+const optionalEnum = (values) =>
+  z
+    .preprocess(
+      (v) => (v === "" || v === undefined ? null : v),
+      z.enum(values).nullable().optional()
+    );
 
 const leadSchema = z.object({
   fullName: z.string().min(2, "Please enter your full name").max(120),
@@ -65,12 +97,27 @@ const leadSchema = z.object({
   vehicleType: z.enum(VEHICLE_TYPE_OPTIONS),
   budget: z.enum(BUDGET_OPTIONS),
   timeline: z.enum(TIMELINE_OPTIONS),
+  deliveryPref: optionalEnum(DELIVERY_PREF_OPTIONS),
+  paymentPlan: optionalEnum(PAYMENT_PLAN_OPTIONS),
+  tradeIn: optionalEnum(TRADE_IN_OPTIONS),
+  tradeInDetails: z
+    .preprocess(
+      (v) => (v === "" || v === undefined ? null : v),
+      z.string().max(200).nullable().optional()
+    ),
 });
 
 function formatLeadEmail(lead) {
-  return [
+  const hotFlags = computeHotFlags(lead);
+  const lines = [
     `New MobilityLeads Pro lead from the Lansing landing page.`,
     ``,
+  ];
+  if (hotFlags.length) {
+    lines.push(`🔥 HOT LEAD: ${hotFlags.join(" • ")}`);
+    lines.push(``);
+  }
+  lines.push(
     `Submitted: ${lead.createdAt}`,
     `Lead ID:   ${lead.id}`,
     ``,
@@ -83,11 +130,28 @@ function formatLeadEmail(lead) {
     `Budget:         ${lead.budget}`,
     `Timeline:       ${lead.timeline}`,
     ``,
+    `— Caregiver decision toolkit —`,
+    `Delivery pref:  ${lead.deliveryPref ?? "(not provided)"}`,
+    `Payment plan:   ${lead.paymentPlan ?? "(not provided)"}`,
+    `Trade-in:       ${lead.tradeIn ?? "(not provided)"}`,
+  );
+  if (lead.tradeIn === "Yes" && lead.tradeInDetails) {
+    lines.push(`Trade-in info:  ${lead.tradeInDetails}`);
+  }
+  lines.push(
+    ``,
     `IP address:     ${lead.ipAddress ?? "—"}`,
     `User agent:     ${lead.userAgent ?? "—"}`,
     ``,
     `Reply by calling ${lead.phone} or emailing ${lead.email} within 24 hours.`,
-  ].join("\n");
+  );
+  return lines.join("\n");
+}
+
+function buildSubject(lead) {
+  const hotFlags = computeHotFlags(lead);
+  const prefix = hotFlags.length ? `🔥 HOT [${hotFlags.join(", ")}] — ` : `New Lead: `;
+  return `${prefix}${lead.fullName} (${lead.zip})`;
 }
 
 async function sendLeadEmail(lead) {
@@ -111,7 +175,7 @@ async function sendLeadEmail(lead) {
         from: fromEmail,
         to: [recipient],
         reply_to: lead.email,
-        subject: `New MobilityLeads Pro Lead: ${lead.fullName} (${lead.zip})`,
+        subject: buildSubject(lead),
         text: formatLeadEmail(lead),
       }),
     });
