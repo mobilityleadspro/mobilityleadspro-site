@@ -29,13 +29,60 @@
 
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
 
-    <!-- Google Analytics (GA4) -->
+    <!-- Google Analytics (GA4) + Google Ads conversion tracking -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-2BGKNYRE0L"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', 'G-2BGKNYRE0L', { send_page_view: true });
+
+      // ====================================================================
+      // Google Ads conversion config — REPLACE AW-XXXXXXXXX with your Google
+      // Ads conversion ID, and replace the send_to value with your full
+      // "AW-XXXXXXXXX/AbCdEfGhIj" identifier from the conversion action setup.
+      // Until then, GA4 still tracks the event and Google Ads will import it
+      // automatically once the GA4 link is set up.
+      // ====================================================================
+      gtag('config', 'AW-XXXXXXXXX');
+
+      // Lead-form conversion interceptor.
+      // The React app POSTs to /api/leads on form submit. We wrap fetch so
+      // any successful POST to that endpoint fires a conversion event in
+      // both GA4 and Google Ads. No source changes required.
+      (function() {
+        var originalFetch = window.fetch;
+        window.fetch = function() {
+          var args = arguments;
+          var url = (args[0] && args[0].url) || args[0] || '';
+          var isLeadPost = typeof url === 'string'
+            && url.indexOf('/api/leads') !== -1
+            && args[1] && (args[1].method || '').toUpperCase() === 'POST';
+          var promise = originalFetch.apply(this, args);
+          if (!isLeadPost) return promise;
+          return promise.then(function(response) {
+            if (response && response.ok) {
+              try {
+                // GA4 standard event for lead generation
+                gtag('event', 'generate_lead', {
+                  currency: 'USD',
+                  value: 150,
+                  event_category: 'lead',
+                  event_label: 'mobility_van_quote_form'
+                });
+                // Google Ads conversion — replace the send_to value once you
+                // have the AW-XXXXXXXXX/<label> from the Google Ads UI.
+                gtag('event', 'conversion', {
+                  send_to: 'AW-XXXXXXXXX/YYYYYYYYY',
+                  value: 150.0,
+                  currency: 'USD'
+                });
+              } catch (e) { /* tracking errors must never break the form */ }
+            }
+            return response;
+          });
+        };
+      })();
     </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
