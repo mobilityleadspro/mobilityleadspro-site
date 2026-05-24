@@ -13,7 +13,7 @@
 //
 // Optional environment variables:
 //   LEAD_NOTIFICATION_EMAIL   override where leads are emailed (default: applinfc@gmail.com)
-//   LEAD_FROM_EMAIL           override the From address (default: onboarding@resend.dev — works without DNS)
+//   LEAD_FROM_EMAIL           override the From address (default: leads@mobilityleadspro.com — domain verified in Resend)
 //   ADMIN_TOKEN               override the admin token (default: tyler2026)
 
 import { getStore } from "@netlify/blobs";
@@ -21,7 +21,7 @@ import { z } from "zod";
 
 const DEFAULT_LEAD_EMAIL = "applinfc@gmail.com";
 const DEFAULT_ADMIN_TOKEN = "tyler2026";
-const DEFAULT_FROM_EMAIL = "MobilityLeads Pro <onboarding@resend.dev>";
+const DEFAULT_FROM_EMAIL = "MobilityLeads Pro <leads@mobilityleadspro.com>";
 
 const VEHICLE_FOR_OPTIONS = [
   "Myself",
