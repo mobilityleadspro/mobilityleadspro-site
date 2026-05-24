@@ -275,8 +275,15 @@ export default async (req, context) => {
 
   await store.setJSON(`lead-${String(nextId).padStart(6, "0")}`, lead);
 
-  // Fire-and-forget email
-  sendLeadEmail(lead).catch((err) => console.error("[leads] email task error:", err));
+  // CRITICAL: Await the email so Netlify doesn't kill the task mid-flight.
+  // The lead is already saved to Blobs above, so even if email fails,
+  // it's recoverable from the admin endpoint and the daily digest.
+  const emailResult = await sendLeadEmail(lead);
+  console.log(`[leads] Lead #${lead.id} email result:`, JSON.stringify(emailResult));
 
-  return jsonResponse(201, { id: lead.id, fullName: lead.fullName });
+  return jsonResponse(201, {
+    id: lead.id,
+    fullName: lead.fullName,
+    emailSent: emailResult.sent,
+  });
 };
