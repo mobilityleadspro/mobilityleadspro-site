@@ -233,6 +233,67 @@ export default async (req, context) => {
     return jsonResponse(200, { count: leads.length, leads });
   }
 
+  // ---- PATCH: update lead outcome (admin only) ----
+  if (req.method === "PATCH") {
+    const url = new URL(req.url);
+    const token = url.searchParams.get("token");
+    const expected = process.env.ADMIN_TOKEN || DEFAULT_ADMIN_TOKEN;
+    if (token !== expected) {
+      return jsonResponse(401, { error: "Unauthorized" });
+    }
+    let patchBody;
+    try {
+      patchBody = await req.json();
+    } catch {
+      return jsonResponse(400, { error: "Invalid JSON body" });
+    }
+    const { id, ...updates } = patchBody;
+    if (!id || typeof id !== "number") {
+      return jsonResponse(400, { error: "id (number) is required" });
+    }
+    const key = `lead-${String(id).padStart(6, "0")}`;
+    const existing = await store.get(key, { type: "json" });
+    if (!existing) {
+      return jsonResponse(404, { error: `Lead #${id} not found` });
+    }
+    const ALLOWED_OUTCOME_FIELDS = [
+      "status",
+      "dealerContacted",
+      "sold",
+      "saleAmount",
+      "notes",
+      "updatedAt",
+    ];
+    const sanitized = {};
+    for (const k of Object.keys(updates)) {
+      if (ALLOWED_OUTCOME_FIELDS.includes(k)) {
+        sanitized[k] = updates[k];
+      }
+    }
+    sanitized.updatedAt = new Date().toISOString();
+    const merged = { ...existing, ...sanitized };
+    await store.setJSON(key, merged);
+    return jsonResponse(200, { id, updated: sanitized });
+  }
+
+  // ---- DELETE: remove a lead (admin only) ----
+  if (req.method === "DELETE") {
+    const url = new URL(req.url);
+    const token = url.searchParams.get("token");
+    const expected = process.env.ADMIN_TOKEN || DEFAULT_ADMIN_TOKEN;
+    if (token !== expected) {
+      return jsonResponse(401, { error: "Unauthorized" });
+    }
+    const idStr = url.searchParams.get("id");
+    const id = idStr ? Number(idStr) : NaN;
+    if (!Number.isInteger(id)) {
+      return jsonResponse(400, { error: "id query param (integer) is required" });
+    }
+    const key = `lead-${String(id).padStart(6, "0")}`;
+    await store.delete(key);
+    return jsonResponse(200, { id, deleted: true });
+  }
+
   // ---- POST: lead capture ----
   if (req.method !== "POST") {
     return jsonResponse(405, { error: "Method not allowed" });

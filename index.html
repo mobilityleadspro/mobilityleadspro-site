@@ -7,7 +7,7 @@
     <title>Wheelchair Vans for Sale in Lansing, MI | MobilityLeads Pro</title>
     <meta
       name="description"
-      content="Find the right wheelchair accessible van in the Greater Lansing area. Free matching with a trusted local mobility dealer. VA benefits accepted."
+      content="Find the right wheelchair accessible van in the Greater Lansing area. Free matching with trusted local mobility dealers. VA benefits accepted."
     />
     <meta name="robots" content="index, follow" />
 
@@ -29,60 +29,13 @@
 
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
 
-    <!-- Google Analytics (GA4) + Google Ads conversion tracking -->
+    <!-- Google Analytics (GA4) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-2BGKNYRE0L"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', 'G-2BGKNYRE0L', { send_page_view: true });
-
-      // ====================================================================
-      // Google Ads conversion config — REPLACE AW-XXXXXXXXX with your Google
-      // Ads conversion ID, and replace the send_to value with your full
-      // "AW-XXXXXXXXX/AbCdEfGhIj" identifier from the conversion action setup.
-      // Until then, GA4 still tracks the event and Google Ads will import it
-      // automatically once the GA4 link is set up.
-      // ====================================================================
-      gtag('config', 'AW-XXXXXXXXX');
-
-      // Lead-form conversion interceptor.
-      // The React app POSTs to /api/leads on form submit. We wrap fetch so
-      // any successful POST to that endpoint fires a conversion event in
-      // both GA4 and Google Ads. No source changes required.
-      (function() {
-        var originalFetch = window.fetch;
-        window.fetch = function() {
-          var args = arguments;
-          var url = (args[0] && args[0].url) || args[0] || '';
-          var isLeadPost = typeof url === 'string'
-            && url.indexOf('/api/leads') !== -1
-            && args[1] && (args[1].method || '').toUpperCase() === 'POST';
-          var promise = originalFetch.apply(this, args);
-          if (!isLeadPost) return promise;
-          return promise.then(function(response) {
-            if (response && response.ok) {
-              try {
-                // GA4 standard event for lead generation
-                gtag('event', 'generate_lead', {
-                  currency: 'USD',
-                  value: 150,
-                  event_category: 'lead',
-                  event_label: 'mobility_van_quote_form'
-                });
-                // Google Ads conversion — replace the send_to value once you
-                // have the AW-XXXXXXXXX/<label> from the Google Ads UI.
-                gtag('event', 'conversion', {
-                  send_to: 'AW-XXXXXXXXX/YYYYYYYYY',
-                  value: 150.0,
-                  currency: 'USD'
-                });
-              } catch (e) { /* tracking errors must never break the form */ }
-            }
-            return response;
-          });
-        };
-      })();
     </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -91,8 +44,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <script type="module" crossorigin src="./assets/index-CQ6a-HAn.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Di5V4yaw.css">
+    <script type="module" crossorigin src="./assets/index-CudgqEr6.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CqwgZ3hG.css">
   </head>
   <body>
     <div id="root"></div>
