@@ -12,14 +12,18 @@
 //   RESEND_API_KEY    your Resend API key (https://resend.com/api-keys)
 //
 // Optional environment variables:
-//   LEAD_NOTIFICATION_EMAIL   override where leads are emailed (default: applinfc@gmail.com)
+//   LEAD_NOTIFICATION_EMAIL   override where leads are emailed (default: tyler@mobilityleadspro.com)
+//   LEAD_NOTIFICATION_CC      optional comma-separated CC list (default: applinfc@gmail.com)
 //   LEAD_FROM_EMAIL           override the From address (default: leads@mobilityleadspro.com — domain verified in Resend)
 //   ADMIN_TOKEN               override the admin token (default: tyler2026)
 
 import { getStore } from "@netlify/blobs";
 import { z } from "zod";
 
-const DEFAULT_LEAD_EMAIL = "applinfc@gmail.com";
+// Primary lead-notification address (Microsoft 365 mailbox at the brand domain)
+const DEFAULT_LEAD_EMAIL = "tyler@mobilityleadspro.com";
+// Safety-net CC during cutover. Remove or override via LEAD_NOTIFICATION_CC after ~7 days of clean delivery.
+const DEFAULT_LEAD_CC = "applinfc@gmail.com";
 const DEFAULT_ADMIN_TOKEN = "tyler2026";
 const DEFAULT_FROM_EMAIL = "MobilityLeads Pro <leads@mobilityleadspro.com>";
 
@@ -242,6 +246,15 @@ async function sendLeadEmail(lead) {
   const apiKey = process.env.RESEND_API_KEY;
   const recipient = process.env.LEAD_NOTIFICATION_EMAIL || DEFAULT_LEAD_EMAIL;
   const fromEmail = process.env.LEAD_FROM_EMAIL || DEFAULT_FROM_EMAIL;
+  // CC list: comma-separated env override, else default safety-net CC.
+  const ccRaw =
+    process.env.LEAD_NOTIFICATION_CC !== undefined
+      ? process.env.LEAD_NOTIFICATION_CC
+      : DEFAULT_LEAD_CC;
+  const ccList = ccRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s && s !== recipient);
   if (!apiKey) {
     console.log(
       `[leads] RESEND_API_KEY not set — would have emailed ${recipient} re: lead #${lead.id} (${lead.fullName}, ${lead.zip})`
@@ -249,19 +262,21 @@ async function sendLeadEmail(lead) {
     return { sent: false, reason: "resend_not_configured" };
   }
   try {
+    const payload = {
+      from: fromEmail,
+      to: [recipient],
+      reply_to: lead.email,
+      subject: buildSubject(lead),
+      text: formatLeadEmail(lead),
+    };
+    if (ccList.length > 0) payload.cc = ccList;
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: [recipient],
-        reply_to: lead.email,
-        subject: buildSubject(lead),
-        text: formatLeadEmail(lead),
-      }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const body = await res.text();
