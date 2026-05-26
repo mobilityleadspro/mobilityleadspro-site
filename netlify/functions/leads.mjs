@@ -62,6 +62,15 @@ const PAYMENT_PLAN_OPTIONS = [
 ];
 const TRADE_IN_OPTIONS = ["No", "Yes", "Maybe"];
 
+const LEAD_TYPE_OPTIONS = ["buyer", "dealer"];
+const DEALERSHIP_SIZE_OPTIONS = [
+  "1 location",
+  "2–5 locations",
+  "6–20 locations",
+  "20+ locations",
+];
+const NMEDA_OPTIONS = ["Yes", "No", "Not sure"];
+
 // Lead-quality scoring: flags that make a lead HOT and ready to call
 function computeHotFlags(lead) {
   const flags = [];
@@ -82,7 +91,8 @@ const optionalEnum = (values) =>
       z.enum(values).nullable().optional()
     );
 
-const leadSchema = z.object({
+const buyerSchema = z.object({
+  leadType: z.literal("buyer").optional().default("buyer"),
   fullName: z.string().min(2, "Please enter your full name").max(120),
   phone: z
     .string()
@@ -107,7 +117,78 @@ const leadSchema = z.object({
     ),
 });
 
+const dealerSchema = z.object({
+  leadType: z.literal("dealer"),
+  fullName: z.string().min(2, "Please enter your full name").max(120),
+  phone: z
+    .string()
+    .min(10, "Please enter a valid US phone number")
+    .regex(
+      /^[+]?[1]?[\s\-.(]?\d{3}[\s\-.)]?[\s\-.]?\d{3}[\s\-.]?\d{4}$/,
+      "Please enter a valid US phone number"
+    ),
+  email: z.string().email("Please enter a valid email"),
+  zip: z.string().regex(/^\d{5}$/, "Please enter a 5-digit ZIP code"),
+  dealershipName: z.string().min(2, "Please enter your dealership name").max(160),
+  role: z.string().max(120).optional().nullable(),
+  dealershipSize: optionalEnum(DEALERSHIP_SIZE_OPTIONS),
+  nmedaMember: optionalEnum(NMEDA_OPTIONS),
+  website: z
+    .preprocess(
+      (v) => (v === "" || v === undefined ? null : v),
+      z.string().max(200).nullable().optional()
+    ),
+  territoryRequest: z
+    .preprocess(
+      (v) => (v === "" || v === undefined ? null : v),
+      z.string().max(300).nullable().optional()
+    ),
+  message: z
+    .preprocess(
+      (v) => (v === "" || v === undefined ? null : v),
+      z.string().max(1000).nullable().optional()
+    ),
+});
+
+const leadSchema = z.union([dealerSchema, buyerSchema]);
+
+function formatDealerInquiryEmail(lead) {
+  const lines = [
+    `🏢 NEW DEALER INQUIRY — MobilityLeads Pro`,
+    ``,
+    `A dealer just requested information and pricing.`,
+    ``,
+    `Submitted: ${lead.createdAt}`,
+    `Lead ID:   ${lead.id}`,
+    ``,
+    `Contact name:     ${lead.fullName}`,
+    `Role:             ${lead.role || "(not provided)"}`,
+    `Dealership:       ${lead.dealershipName}`,
+    `Website:          ${lead.website || "(not provided)"}`,
+    `Phone:            ${lead.phone}`,
+    `Email:            ${lead.email}`,
+    `ZIP:              ${lead.zip}`,
+    `Dealership size:  ${lead.dealershipSize || "(not provided)"}`,
+    `NMEDA member:     ${lead.nmedaMember || "(not provided)"}`,
+  ];
+  if (lead.territoryRequest) {
+    lines.push(``, `Territory of interest:`, lead.territoryRequest);
+  }
+  if (lead.message) {
+    lines.push(``, `Message:`, lead.message);
+  }
+  lines.push(
+    ``,
+    `IP address:       ${lead.ipAddress ?? "—"}`,
+    `User agent:       ${lead.userAgent ?? "—"}`,
+    ``,
+    `Reply with founding-dealer pricing ($2,500/mo locked 24 months) and a 15-min territory review call.`,
+  );
+  return lines.join("\n");
+}
+
 function formatLeadEmail(lead) {
+  if (lead.leadType === "dealer") return formatDealerInquiryEmail(lead);
   const hotFlags = computeHotFlags(lead);
   const lines = [
     `New MobilityLeads Pro lead from the Lansing landing page.`,
@@ -149,6 +230,9 @@ function formatLeadEmail(lead) {
 }
 
 function buildSubject(lead) {
+  if (lead.leadType === "dealer") {
+    return `[DEALER INQUIRY] 🏢 ${lead.dealershipName} — ${lead.fullName} (${lead.zip})`;
+  }
   const hotFlags = computeHotFlags(lead);
   const prefix = hotFlags.length ? `🔥 HOT [${hotFlags.join(", ")}] — ` : `New Lead: `;
   return `${prefix}${lead.fullName} (${lead.zip})`;
@@ -214,9 +298,28 @@ export default async (req, context) => {
 
   const store = getStore("leads");
 
-  // ---- GET: admin endpoint ----
+  // ---- GET /api/leads?stats=1 : public stats (no token required) ----
   if (req.method === "GET") {
     const url = new URL(req.url);
+    if (url.searchParams.get("stats") === "1") {
+      const { blobs } = await store.list();
+      const allLeads = await Promise.all(
+        blobs
+          .filter((b) => b.key.startsWith("lead-"))
+          .map((b) => store.get(b.key, { type: "json" }))
+      );
+      const buyers = allLeads.filter((l) => l && l.leadType !== "dealer");
+      const dealers = allLeads.filter((l) => l && l.leadType === "dealer");
+      // Public-safe counts only — never expose PII via this endpoint.
+      return jsonResponse(200, {
+        totalLeads: buyers.length,
+        dealerInquiries: dealers.length,
+        // We display "Lansing pilot" badge until totalLeads crosses 25
+        phase: buyers.length >= 25 ? "growing" : "lansing_pilot",
+        lastUpdated: new Date().toISOString(),
+      });
+    }
+
     const token = url.searchParams.get("token");
     const expected = process.env.ADMIN_TOKEN || DEFAULT_ADMIN_TOKEN;
     if (token !== expected) {
